@@ -1,0 +1,1 @@
+~/go/bin/gow run ./main.go serve --http=0.0.0.0:8080

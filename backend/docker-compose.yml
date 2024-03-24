@@ -1,0 +1,14 @@
+version: '3'
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./pb_data:/pb/pb_data
+      - ./pb_hooks:/pb/pb_hooks
+      - ./migrations:/pb/migrations
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
