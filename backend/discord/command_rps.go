@@ -227,7 +227,7 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		player2Id := game.GetString("player2_id")
 		tied := winnerId == ""
 		message := fmt.Sprintf("<@!%s> vs. <@!%s> - tied!", player1Id, player2Id)
-		if tied {
+		if !tied {
 			message = fmt.Sprintf("<@!%s> vs. <@!%s> - <@!%s> won!", player1Id, player2Id, winnerId)
 		}
 
