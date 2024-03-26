@@ -71,7 +71,7 @@ func RPSUpsertGameInteraction(dao *daos.Dao, interactionId string, gameId string
 			return err
 		}
 	} else {
-		log.Println("rps interaction already existins, nothing to do here")
+		log.Println("rps interaction already exists, nothing to do here")
 	}
 
 	return nil

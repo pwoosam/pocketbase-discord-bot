@@ -5,7 +5,6 @@ import (
 	"log"
 	"myapp/gamedata"
 	"myapp/service"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/pocketbase/pocketbase/daos"
@@ -81,6 +80,45 @@ const (
 	rpsPaperCommandName    = "rps_paper"
 	rpsScissorsCommandName = "rps_scissors"
 )
+
+func rpsCommandNameToChoice(commandName string) gamedata.RPSChoice {
+	switch commandName {
+	case rpsRockCommandName:
+		return gamedata.Rock
+	case rpsPaperCommandName:
+		return gamedata.Paper
+	case rpsScissorsCommandName:
+		return gamedata.Scissors
+	default:
+		return gamedata.Undecided
+	}
+}
+
+func rpsChoiceToString(choice gamedata.RPSChoice) string {
+	switch choice {
+	case gamedata.Rock:
+		return "rock"
+	case gamedata.Paper:
+		return "paper"
+	case gamedata.Scissors:
+		return "scissors"
+	default:
+		return "undecided"
+	}
+}
+
+func rpsChoiceToEmoji(choice gamedata.RPSChoice) string {
+	switch choice {
+	case gamedata.Rock:
+		return "🪨"
+	case gamedata.Paper:
+		return "📄"
+	case gamedata.Scissors:
+		return "✂️"
+	default:
+		return ""
+	}
+}
 
 func rpsJoinHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var originalUserID string
@@ -172,17 +210,9 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		err    error
 	)
 
-	selectedChoice := strings.TrimPrefix(i.MessageComponentData().CustomID, "rps_")
-	switch selectedChoice {
-	case "rock":
-		choice = gamedata.Rock
-	case "paper":
-		choice = gamedata.Paper
-	case "scissors":
-		choice = gamedata.Scissors
-	default:
-		log.Println("invalid rps choice:", selectedChoice)
-		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("Invalid choice %s!", selectedChoice), []discordgo.MessageComponent{}); err != nil {
+	if choice = rpsCommandNameToChoice(i.MessageComponentData().CustomID); choice == gamedata.Undecided {
+		log.Println("invalid rps choice:", choice)
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("Invalid choice %s!", rpsChoiceToString(choice)), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps invalid choice response:", err)
 		}
 		return
@@ -218,10 +248,12 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		winnerId := game.GetString("player_id_winner")
 		player1Id := game.GetString("player1_id")
 		player2Id := game.GetString("player2_id")
+		player1Emoji := rpsChoiceToEmoji(gamedata.RPSChoice(game.GetInt("player1_choice")))
+		player2Emoji := rpsChoiceToEmoji(gamedata.RPSChoice(game.GetInt("player2_choice")))
 		tied := winnerId == ""
 		message := fmt.Sprintf("<@!%s> vs. <@!%s> - tied!", player1Id, player2Id)
 		if !tied {
-			message = fmt.Sprintf("<@!%s> vs. <@!%s> - <@!%s> won!", player1Id, player2Id, winnerId)
+			message = fmt.Sprintf("<@!%s>%s vs. <@!%s>%s - <@!%s> won!", player1Id, player1Emoji, player2Id, player2Emoji, winnerId)
 		}
 
 		if err = InteractionRespondUpdateMessage(s, i, message, []discordgo.MessageComponent{}); err != nil {
@@ -230,7 +262,11 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 		message2 := "Tied!"
 		if !tied {
-			message2 = fmt.Sprintf("<@!%s> won!", winnerId)
+			if winnerId == player1Id {
+				message2 = fmt.Sprintf("%s beats %s, <@!%s> won!", player1Emoji, player2Emoji, winnerId)
+			} else {
+				message2 = fmt.Sprintf("%s beats %s, <@!%s> won!", player2Emoji, player1Emoji, winnerId)
+			}
 		}
 		if _, err = InteractionFollowupMessage(s, i, message2, []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps scissors result:", err)
@@ -238,7 +274,7 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("<@!%s> chose %s!", i.Interaction.Member.User.ID, selectedChoice), []discordgo.MessageComponent{}); err != nil {
+	if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("<@!%s> chose %s!", i.Interaction.Member.User.ID, rpsChoiceToString(choice)), []discordgo.MessageComponent{}); err != nil {
 		log.Println("failed to send rps scissors response:", err)
 	}
 }
