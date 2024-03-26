@@ -3,11 +3,27 @@ package gamedata
 import (
 	"errors"
 	"log"
-	"myapp/games"
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
+)
+
+type RPSGameStatus int
+
+const (
+	RPSGameStatusWaitingForPlayers RPSGameStatus = iota
+	RPSGameStatusInProgress
+	RPSGameStatusFinished
+)
+
+type RPSChoice int
+
+const (
+	Undecided RPSChoice = iota
+	Rock
+	Paper
+	Scissors
 )
 
 func RPSGetGameByInteractionId(dao *daos.Dao, interactionId string) (*models.Record, error) {
@@ -66,7 +82,7 @@ func RPSCreateGame(dao *daos.Dao, userID string) (*models.Record, error) {
 	gameRecord.Load(map[string]any{
 		"id":         uuid.NewString(),
 		"player1_id": userID,
-		"status":     games.RPSGameStatusWaitingForPlayers,
+		"status":     RPSGameStatusWaitingForPlayers,
 	})
 
 	if err := dao.SaveRecord(gameRecord); err != nil {
@@ -91,7 +107,7 @@ func RPSJoinGame(dao *daos.Dao, gameId string, userId string) error {
 	}
 
 	game.Set("player2_id", userId)
-	game.Set("status", int(games.RPSGameStatusInProgress))
+	game.Set("status", int(RPSGameStatusInProgress))
 
 	if err := dao.SaveRecord(game); err != nil {
 		return err
@@ -100,13 +116,13 @@ func RPSJoinGame(dao *daos.Dao, gameId string, userId string) error {
 	return nil
 }
 
-func RPSMakeChoice(dao *daos.Dao, gameId string, userId string, choice games.RPSChoice) error {
+func RPSMakeChoice(dao *daos.Dao, gameId string, userId string, choice RPSChoice) error {
 	game, err := rpsGetGameByGameId(dao, gameId)
 	if err != nil {
 		return err
 	}
 
-	if games.RPSGameStatus(game.GetInt("status")) != games.RPSGameStatusInProgress {
+	if RPSGameStatus(game.GetInt("status")) != RPSGameStatusInProgress {
 		return errors.New("game is not in progress")
 	}
 
@@ -118,13 +134,13 @@ func RPSMakeChoice(dao *daos.Dao, gameId string, userId string, choice games.RPS
 		return errors.New("user is not a player in this game")
 	}
 
-	player1Choice := games.RPSChoice(game.GetInt("player1_choice"))
-	player2Choice := games.RPSChoice(game.GetInt("player2_choice"))
-	if games.RPSChoice(player1Choice) != games.Undecided && games.RPSChoice(player2Choice) != games.Undecided {
+	player1Choice := RPSChoice(game.GetInt("player1_choice"))
+	player2Choice := RPSChoice(game.GetInt("player2_choice"))
+	if RPSChoice(player1Choice) != Undecided && RPSChoice(player2Choice) != Undecided {
 		winner, loser := rpsGetWinnerAndLoser(player1Choice, player2Choice, game.GetString("player1_id"), game.GetString("player2_id"))
 		game.Set("player_id_winner", winner)
 		game.Set("player_id_loser", loser)
-		game.Set("status", int(games.RPSGameStatusFinished))
+		game.Set("status", int(RPSGameStatusFinished))
 	}
 
 	if err := dao.SaveRecord(game); err != nil {
@@ -134,20 +150,20 @@ func RPSMakeChoice(dao *daos.Dao, gameId string, userId string, choice games.RPS
 	return nil
 }
 
-func rpsGetWinnerAndLoser(player1Choice, player2Choice games.RPSChoice, player1Id, player2Id string) (string, string) {
+func rpsGetWinnerAndLoser(player1Choice, player2Choice RPSChoice, player1Id, player2Id string) (string, string) {
 	if player1Choice == player2Choice {
 		return "", ""
 	}
 
-	if player1Choice == games.Rock && player2Choice == games.Scissors {
+	if player1Choice == Rock && player2Choice == Scissors {
 		return player1Id, player2Id
 	}
 
-	if player1Choice == games.Paper && player2Choice == games.Rock {
+	if player1Choice == Paper && player2Choice == Rock {
 		return player1Id, player2Id
 	}
 
-	if player1Choice == games.Scissors && player2Choice == games.Paper {
+	if player1Choice == Scissors && player2Choice == Paper {
 		return player1Id, player2Id
 	}
 

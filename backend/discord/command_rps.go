@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"myapp/gamedata"
-	"myapp/games"
 	"myapp/service"
 	"strings"
 
@@ -26,20 +25,22 @@ func rpsHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		userID = i.Interaction.Member.User.ID
 	}
 
-	var newGame *models.Record
-	err := service.App.Dao().RunInTransaction(func(dao *daos.Dao) error {
+	var (
+		newGame *models.Record
+		err     error
+	)
+	if err = service.App.Dao().RunInTransaction(func(dao *daos.Dao) error {
 		var err error
 		newGame, err = gamedata.RPSCreateGame(dao, userID)
 		if err != nil {
 			return err
 		}
-		if err := gamedata.RPSUpsertGameInteraction(dao, i.Interaction.ID, newGame.Id); err != nil {
+		if err = gamedata.RPSUpsertGameInteraction(dao, i.Interaction.ID, newGame.Id); err != nil {
 			return err
 		}
 
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Println("failed to upsert rps interaction:", err)
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -51,7 +52,7 @@ func rpsHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	if err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("<@!%s> created game. Waiting for players to join.", userID),
@@ -69,9 +70,7 @@ func rpsHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 					},
 				},
 			}},
-	})
-
-	if err != nil {
+	}); err != nil {
 		log.Println("failed to send rps response:", err)
 	}
 }
@@ -91,13 +90,15 @@ func rpsJoinHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		originalUserID = i.Message.Member.User.ID
 	}
 
-	game, err := gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.Interaction.ID)
-
-	if err != nil {
-		fmt.Println("failed to get rps game from db: ", err)
+	var (
+		game *models.Record
+		err  error
+	)
+	if game, err = gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.Interaction.ID); err != nil {
+		log.Println("failed to get rps game from db: ", err)
 		return
 	} else {
-		fmt.Println(game)
+		log.Println(game)
 	}
 
 	var userID string
@@ -109,20 +110,19 @@ func rpsJoinHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	if err = gamedata.RPSJoinGame(service.App.Dao(), game.Id, userID); err != nil {
 		log.Println("failed to join rps game:", err)
-		err := InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to join game: ", err), []discordgo.MessageComponent{})
-		if err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to join game: ", err), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps join response:", err)
 		}
 		return
 	}
 
-	err = InteractionRespondUpdateMessage(s, i, fmt.Sprintf("<@!%s> created game. <@!%s> joined.", originalUserID, userID), []discordgo.MessageComponent{})
-	if err != nil {
+	if err = InteractionRespondUpdateMessage(s, i, fmt.Sprintf("<@!%s> created game. <@!%s> joined.", originalUserID, userID), []discordgo.MessageComponent{}); err != nil {
 		log.Println("failed to send rps join response:", err)
 		return
 	}
 
-	newMsg, err := InteractionFollowupMessage(s, i, fmt.Sprintf("<@!%s> vs. <@!%s>", originalUserID, userID),
+	var newMsg *discordgo.Message
+	if newMsg, err = InteractionFollowupMessage(s, i, fmt.Sprintf("<@!%s> vs. <@!%s>", originalUserID, userID),
 		[]discordgo.MessageComponent{
 			discordgo.ActionsRow{
 				Components: []discordgo.MessageComponent{
@@ -152,15 +152,12 @@ func rpsJoinHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 					},
 				},
 			},
-		})
-
-	if err != nil {
+		}); err != nil {
 		log.Println("failed to send rps followup message:", err)
 		return
 	}
 
-	err = gamedata.RPSUpsertGameInteraction(service.App.Dao(), newMsg.ID, game.Id)
-	if err != nil {
+	if err = gamedata.RPSUpsertGameInteraction(service.App.Dao(), newMsg.ID, game.Id); err != nil {
 		log.Println("failed to update rps game:", err)
 		if err = InteractionRespondUpdateMessageEphemeral(s, i, fmt.Sprint("Failed to update game: ", err), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps join response:", err)
@@ -169,59 +166,55 @@ func rpsJoinHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	selectedChoice := strings.TrimPrefix(i.MessageComponentData().CustomID, "rps_")
+	var (
+		choice gamedata.RPSChoice
+		game   *models.Record
+		err    error
+	)
 
-	var choice games.RPSChoice
+	selectedChoice := strings.TrimPrefix(i.MessageComponentData().CustomID, "rps_")
 	switch selectedChoice {
 	case "rock":
-		choice = games.Rock
+		choice = gamedata.Rock
 	case "paper":
-		choice = games.Paper
+		choice = gamedata.Paper
 	case "scissors":
-		choice = games.Scissors
+		choice = gamedata.Scissors
 	default:
 		log.Println("invalid rps choice:", selectedChoice)
-		if err := InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("Invalid choice %s!", selectedChoice), []discordgo.MessageComponent{}); err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("Invalid choice %s!", selectedChoice), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps invalid choice response:", err)
 		}
 		return
 	}
 
-	game, err := gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.ID)
-	if err != nil {
-		err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to get game: ", err), []discordgo.MessageComponent{})
-		if err != nil {
+	if game, err = gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.ID); err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to get game: ", err), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps choice response:", err)
 		}
 		return
 	}
-	err = gamedata.RPSMakeChoice(service.App.Dao(), game.Id, i.Interaction.Member.User.ID, choice)
-	if err != nil {
-		err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to make choice: ", err), []discordgo.MessageComponent{})
-		if err != nil {
-			log.Println("failed to send rps choice response:", err)
-		}
-		return
-	}
-
-	game, err = gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.ID)
-	if err != nil {
-		err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to get updated game: ", err), []discordgo.MessageComponent{})
-		if err != nil {
-			log.Println("failed to send rps choice response:", err)
-		}
-		return
-	}
-	err = gamedata.RPSUpsertGameInteraction(service.App.Dao(), i.Message.ID, game.Id)
-	if err != nil {
-		err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to update game interaction: ", err), []discordgo.MessageComponent{})
-		if err != nil {
+	if err = gamedata.RPSMakeChoice(service.App.Dao(), game.Id, i.Interaction.Member.User.ID, choice); err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to make choice: ", err), []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps choice response:", err)
 		}
 		return
 	}
 
-	if games.RPSGameStatus(game.GetInt("status")) == games.RPSGameStatusFinished {
+	if game, err = gamedata.RPSGetGameByInteractionId(service.App.Dao(), i.Message.ID); err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to get updated game: ", err), []discordgo.MessageComponent{}); err != nil {
+			log.Println("failed to send rps choice response:", err)
+		}
+		return
+	}
+	if err = gamedata.RPSUpsertGameInteraction(service.App.Dao(), i.Message.ID, game.Id); err != nil {
+		if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprint("Failed to update game interaction: ", err), []discordgo.MessageComponent{}); err != nil {
+			log.Println("failed to send rps choice response:", err)
+		}
+		return
+	}
+
+	if gamedata.RPSGameStatus(game.GetInt("status")) == gamedata.RPSGameStatusFinished {
 		winnerId := game.GetString("player_id_winner")
 		player1Id := game.GetString("player1_id")
 		player2Id := game.GetString("player2_id")
@@ -231,8 +224,7 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			message = fmt.Sprintf("<@!%s> vs. <@!%s> - <@!%s> won!", player1Id, player2Id, winnerId)
 		}
 
-		err := InteractionRespondUpdateMessage(s, i, message, []discordgo.MessageComponent{})
-		if err != nil {
+		if err = InteractionRespondUpdateMessage(s, i, message, []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to update rps scissors response:", err)
 		}
 
@@ -240,15 +232,13 @@ func rpsChoiceHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if !tied {
 			message2 = fmt.Sprintf("<@!%s> won!", winnerId)
 		}
-		_, err = InteractionFollowupMessage(s, i, message2, []discordgo.MessageComponent{})
-		if err != nil {
+		if _, err = InteractionFollowupMessage(s, i, message2, []discordgo.MessageComponent{}); err != nil {
 			log.Println("failed to send rps scissors result:", err)
 		}
 		return
 	}
 
-	err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("<@!%s> chose %s!", i.Interaction.Member.User.ID, selectedChoice), []discordgo.MessageComponent{})
-	if err != nil {
+	if err = InteractionRespondNewMessageEphemeral(s, i, fmt.Sprintf("<@!%s> chose %s!", i.Interaction.Member.User.ID, selectedChoice), []discordgo.MessageComponent{}); err != nil {
 		log.Println("failed to send rps scissors response:", err)
 	}
 }

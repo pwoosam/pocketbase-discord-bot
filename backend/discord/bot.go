@@ -10,14 +10,12 @@ func CreateBot(authToken string) error {
 		return err
 	}
 
-	err = discord.Open()
-	if err != nil {
+	if err = discord.Open(); err != nil {
 		return err
 	}
 
-	commands := []*discordgo.ApplicationCommand{&helloCommand, &rpsCommand}
+	commands := []*discordgo.ApplicationCommand{&rpsCommand}
 	commandHandlers := map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		helloCommand.Name:      helloHandler,
 		rpsCommand.Name:        rpsHandler,
 		rpsJoinCommandName:     rpsJoinHandler,
 		rpsRockCommandName:     rpsChoiceHandler,
@@ -25,8 +23,7 @@ func CreateBot(authToken string) error {
 		rpsScissorsCommandName: rpsChoiceHandler,
 	}
 
-	_, err = discord.ApplicationCommandBulkOverwrite(discord.State.Application.ID, "", commands)
-	if err != nil {
+	if _, err = discord.ApplicationCommandBulkOverwrite(discord.State.Application.ID, "", commands); err != nil {
 		return err
 	}
 
